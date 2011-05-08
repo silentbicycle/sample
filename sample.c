@@ -65,7 +65,7 @@ static int next_file() {
                 if (fclose(cur_file) != 0) err(1, "%s", fnames[fn_index]);
                 cur_file = NULL;
         }
-        while (fn_index < fn_count) {
+        if (fn_index < fn_count) {
                 fn = fnames[fn_index];
                 f = (strcmp(fn, "-")==0 ? stdin : fopen(fn, "r"));
                 fn_index++;
