@@ -36,7 +36,7 @@ typedef enum { M_SHUFFLE, M_PERC } filter_mode;
 /* Settings */
 static filter_mode mode = M_SHUFFLE;
 static I samples = 4;           /* N random lines from all input */
-static I percent = 10;          /* each line has N% chance of sampling */
+static double percent = 10.0;   /* each line has N% chance of sampling */
 static FILE *cur_file = NULL;
 static char **fnames;
 static I fn_count = 0;
@@ -160,7 +160,7 @@ static void sample_count(I samples) {
 
 /* Just print each line, with (percent)% probability. */
 static void sample_perc() {
-        double perc = percent*.01;
+        double perc = percent * 0.01;
         double rv;
         while (1) {
                 char *line = next_line();
@@ -187,7 +187,7 @@ static void handle_args(int *argc, char ***argv) {
                         break;
                 case 'p':       /* percent */
                         mode = M_PERC;
-                        percent = atoi(optarg);
+                        percent = atof(optarg);
                         if (percent < 0 || percent > 100) {
                                 fprintf(stderr, "Bad percentage.\n");
                                 exit(1);
