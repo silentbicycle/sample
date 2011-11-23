@@ -31,8 +31,10 @@ typedef unsigned long I;
 #define HAS_FGETLN
 #endif
 
+typedef enum { M_SHUFFLE, M_PERC } filter_mode;
+
 /* Settings */
-static char mode = 's';         /* 's' = shuffle, 'p' = percentage */
+static filter_mode mode = M_SHUFFLE;
 static I samples = 4;           /* N random lines from all input */
 static I percent = 10;          /* each line has N% chance of sampling */
 static FILE *cur_file = NULL;
@@ -177,14 +179,14 @@ static void handle_args(int *argc, char ***argv) {
                         break;  /* NOTREACHED */
                 case 'n':       /* number of samples */
                         samples = atol(optarg);
-                        mode = 's';
+                        mode = M_SHUFFLE;
                         if (samples < 1) {
                                 fprintf(stderr, "Bad sample count.\n");
                                 exit(1);
                         }
                         break;
                 case 'p':       /* percent */
-                        mode = 'p';
+                        mode = M_PERC;
                         percent = atoi(optarg);
                         if (percent < 0 || percent > 100) {
                                 fprintf(stderr, "Bad percentage.\n");
@@ -223,9 +225,9 @@ int main(int argc, char **argv) {
         handle_args(&argc, &argv);
         next_file();
 
-        if (mode == 's')
+        if (mode == M_SHUFFLE)
                 sample_count(samples);
-        else if (mode == 'p')
+        else if (mode == M_PERC)
                 sample_perc();
         else
                 usage();
