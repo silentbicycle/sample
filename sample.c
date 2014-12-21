@@ -34,6 +34,12 @@ typedef enum {
     M_PERC,                     /* get N% of input */
 } filter_mode;
 
+/* Version 0.0.1 */
+#define SAMPLE_VERSION_MAJOR 0
+#define SAMPLE_VERSION_MINOR 0
+#define SAMPLE_VERSION_PATCH 1
+#define SAMPLE_AUTHOR "Scott Vokes <vokes.s@gmail.com>"
+
 /* Settings */
 static filter_mode mode = M_COUNT;
 static size_t samples = 4;     /* N random lines from all input */
@@ -49,7 +55,11 @@ typedef struct sample_info {
 } sample_info;
 
 static void usage(void) {
-    fprintf(stderr, "Usage: sample [-h] [-n count] [-p percent] [-s seed] [FILE ...]\n");
+    fprintf(stderr, "sample version %d.%d.%d by %s\n",
+        SAMPLE_VERSION_MAJOR, SAMPLE_VERSION_MINOR,
+        SAMPLE_VERSION_PATCH, SAMPLE_AUTHOR);
+    fprintf(stderr,
+        "Usage: sample [-h] [-n count] [-p percent] [-s seed] [FILE ...]\n");
     exit(1);
 }
 
