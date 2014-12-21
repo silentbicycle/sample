@@ -14,241 +14,118 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <string.h>
-#include <err.h>
-#include <errno.h>
-#include <sys/param.h>
-#include <sys/time.h>
+#include "sample.h"
 
-#if defined(__linux__)
-#define HAS_GETLINE
-#elif defined(BSD)
-#define HAS_FGETLN
-#endif
-
-typedef enum {
-    M_COUNT,                    /* get N samples */
-    M_PERC,                     /* get N% of input */
-} filter_mode;
-
-/* Version 0.0.1 */
-#define SAMPLE_VERSION_MAJOR 0
-#define SAMPLE_VERSION_MINOR 0
-#define SAMPLE_VERSION_PATCH 1
-#define SAMPLE_AUTHOR "Scott Vokes <vokes.s@gmail.com>"
-
-/* Settings */
-static filter_mode mode = M_COUNT;
-static size_t samples = 4;     /* N random lines from all input */
-static double percent = 10.0;  /* each line has N% chance of sampling */
-static FILE *cur_file = NULL;
-static char **fnames;
-static size_t fn_count = 0;
-static size_t fn_index = 0;
-
-typedef struct sample_info {
-    char *line;
-    size_t ct;                   /* line number */
+typedef struct {
+    char *buf;
+    size_t buf_sz;
+    size_t length;
+    size_t line_number;
 } sample_info;
 
-static void usage(void) {
-    fprintf(stderr, "sample version %d.%d.%d by %s\n",
-        SAMPLE_VERSION_MAJOR, SAMPLE_VERSION_MINOR,
-        SAMPLE_VERSION_PATCH, SAMPLE_AUTHOR);
-    fprintf(stderr,
-        "Usage: sample [-h] [-n count] [-p percent] [-s seed] [FILE ...]\n");
-    exit(1);
-}
+static int si_cmp(const void *a, const void *b);
+static bool keep(sample_info *kept, const char *line, size_t len, size_t id);
 
-static void *alloc(size_t sz) {
-    void *p = malloc(sz);
-    if (p == NULL) { err(1, "malloc fail"); }
-    return p;
-}
+#define DEF_BUF_SIZE 8          /* Start small to exercise buffer growing */
 
-/* Iterate over input files. "-" is stdin. */
-static int next_file(void) {
-    char *fn = NULL;
-    FILE *f = NULL;
-    if (cur_file && cur_file != stdin &&
-        fn_index < fn_count && fnames[fn_index] != NULL) {
-        if (fclose(cur_file) != 0) { err(1, "%s", fnames[fn_index]); }
-        cur_file = NULL;
+/* Randomly sample N values from a stream of unknown length, with
+ * unknown probability. Knuth 3.4.2, algorithm R (Reservoir sampling). */
+int sample_count(config *cfg, line_iter_cb *line_iter) {
+    size_t samples = cfg->u.count.samples;
+    sample_info *kept = calloc(samples, sizeof(*kept));
+    if (kept == NULL) { err(1, "calloc"); }
+
+    size_t i = 0;
+    for (i = 0; i < samples; i++) {
+        sample_info *si = &kept[i];
+        si->buf = malloc(DEF_BUF_SIZE);
+        if (si->buf == NULL) { err(1, "malloc"); }
+        si->buf_sz = DEF_BUF_SIZE;
     }
-    if (fn_index < fn_count) {
-        fn = fnames[fn_index];
-        f = ((strcmp(fn, "-") == 0) ? stdin : fopen(fn, "r"));
-        fn_index++;
-        cur_file = f;
-        if (f == NULL) { /* warn about unreadable file and skip */
-            warn("%s", fn);
-            errno = 0;
-            return next_file();
+
+    const char *line = NULL;
+    size_t len = 0;
+
+    /* Fill buffer with SAMPLES, then randomly replace them
+     * with others with a samples/i chance. */
+
+    for (i = 0; i < samples; i++) {
+        line = line_iter(cfg, &len);
+        if (line == NULL) { break; }
+        keep(&kept[i], line, len, i);
+    }
+
+    line = line_iter(cfg, &len);
+
+    while (line) {
+        long rv = (random() % i);
+        if (rv < samples) {
+            keep(&kept[rv], line, len, i);
         }
-        return 1;
+        i++;
+        line = line_iter(cfg, &len);
     }
+
+    /* Output samples, in input order. */
+    qsort(kept, samples, sizeof(sample_info), si_cmp);
+    for (i = 0; i < samples; i++) {
+        if (kept[i].length > 0) { printf("%s\n", kept[i].buf); }
+    }
+
+    /* free kept and buffers */
+    for (i = 0; i < samples; i++) {
+        free(kept[i].buf);
+    }
+    free(kept);
+
     return 0;
 }
 
-/* Get next input line, switching to new files as necessary. */
-static char *next_line() {
-    if (cur_file == NULL && next_file() == 0) { return NULL; }
-#if defined(HAS_GETLINE)
-    static char buf[4096];
-    char *line = NULL;
-    size_t sz = 4096;
-    ssize_t res = getline(&line, &sz, cur_file);
-    if (res < 1) {
-        if (next_file() == 0) {
-            return NULL;
-        } else {
-            return next_line();
-        }
-    }
-    strncpy(buf, line, 4096);
-    buf[res-1] = '\0';
-    free(line);
-    return buf;
-#elif defined(HAS_FGETLN)
-    size_t len;
-    char *n = fgetln(cur_file, &len);
-    if (n == NULL) {
-        if (next_file() == 0) {
-            return NULL;
-        } else {
-            return next_line();
-        }
-    }
-    if (n[len-1] == '\n') { n[len-1] = '\0'; }
-    return n;
-#else
-#error Must have getline or fgetln
-#endif
-}
-
-static void keep(sample_info *kept, char *line, size_t line_ct, size_t i) {
-    int len = strlen(line);
-    char *p = alloc(sizeof(char)*len + 1);
-    strncpy(p, line, len);
-    p[len > 0 ? len : 0] = '\0';
-    if (kept[i].line != NULL) { free(kept[i].line); }
-    kept[i].ct = line_ct; /* so lines can be output in orig. order */
-    kept[i].line = p;
-}
-
 static int si_cmp(const void *a, const void *b) {
-    size_t ia = ((sample_info *)a)->ct;
-    size_t ib = ((sample_info *)b)->ct;
+    size_t ia = ((sample_info *)a)->line_number;
+    size_t ib = ((sample_info *)b)->line_number;
     return ia < ib ? -1 : ia > ib ? 1 : 0;
 }
 
-/* Randomly sample N values from a stream of unknown length, with
- * unknown probability. Knuth 3.4.2, algorithm R. */
-static void sample_count(size_t samples) {
-    size_t i = 0;
-    double rv;
-    sample_info *kept = alloc(samples*sizeof(sample_info));
-    memset(kept, 0, samples*sizeof(sample_info *));
-    
-    for (i = 0; i < samples; i++) {       /* Initial samples */
-        char *line = next_line();
-        if (line == NULL) { break; }
-        keep(kept, line, i, i);
-    }
-    
-    while (1) {                       /* Randomly replace current samples */
-        char *line = next_line();
-        if (line == NULL) { break; }
-        i++;
-        rv = (random() % RAND_MAX)/(double)RAND_MAX;
-        if (rv <= samples/(1.0*i)) {
-            keep(kept, line, i, random() % samples);
+static bool keep(sample_info *si, const char *line, size_t len, size_t id) {
+    if (si->buf_sz < len + 1) {
+        size_t nsize = 2 * si->buf_sz;
+        while (nsize < len + 1) { nsize *= 2; }
+        char *nbuf = realloc(si->buf, nsize);
+        if (nbuf) {
+            si->buf_sz = nsize;
+            si->buf = nbuf;
+        } else {
+            return false;
         }
     }
-    
-    /* Output samples, in original input order. */
-    qsort(kept, samples, sizeof(sample_info), si_cmp);
-    for (i = 0; i < samples; i++) {
-        if (kept[i].line != NULL) { printf("%s\n", kept[i].line); }
-    }
+
+    memcpy(si->buf, line, len);
+    si->buf[len] = '\0';
+    si->length = len;
+    si->line_number = id;
+
+    return true;
 }
 
 /* Just print each line, with (percent)% probability. */
-static void sample_perc() {
-    double perc = percent * 0.01;
-    double rv;
-    while (1) {
-        char *line = next_line();
-        if (line == NULL) { return; }
-        rv = (random() % RAND_MAX)/(double)RAND_MAX;
-        if (rv <= perc) { printf("%s\n", line); }
-    }
-}
+int sample_percent(config *cfg, line_iter_cb *line_iter) {
+    struct out_pair *pairs = cfg->u.percent.pairs;
+    size_t pair_count = cfg->u.percent.pair_count;
 
-static void handle_args(int *argc, char ***argv) {
-    int fl, i;
-    while ((fl = getopt(*argc, *argv, "hn:p:s:")) != -1) {
-        switch (fl) {
-        case 'h':       /* help */
-            usage();
-            break;  /* NOTREACHED */
-        case 'n':       /* number of samples */
-            samples = atol(optarg);
-            mode = M_COUNT;
-            if (samples < 1) {
-                fprintf(stderr, "Bad sample count.\n");
-                exit(1);
+    const char *line = line_iter(cfg, NULL);
+    while (line) {
+        double rv = (random() % RAND_MAX)/(double)RAND_MAX;
+        for (int i = 0; i < pair_count; i++) {
+            if (rv < pairs[i].perc) {
+                if (pairs[i].out) {
+                    fprintf(pairs[i].out, "%s\n", line);
+                }
+                break;
             }
-            break;
-        case 'p':       /* percent */
-            mode = M_PERC;
-            percent = atof(optarg);
-            if (percent < 0 || percent > 100) {
-                fprintf(stderr, "Bad percentage.\n");
-                exit(1);
-            }
-            break;
-        case 's':       /* seed */
-            srandom(atol(optarg));
-            break;
-        default:
-            usage();
-            /* NOTREACHED */
         }
-    }
-    *argc -= (optind-1);
-    *argv += (optind-1);
-    
-    fn_count = (*argc - 1);
-    if (fn_count == 0) { fn_count = 1; }
-    
-    fnames = alloc(fn_count*sizeof(char *));
-    fnames[0] = "-";        /* default to stdin */
-    for (i = 1; i < *argc; i++) {
-        fnames[i - 1] = (*argv)[i];
-    }
-}
 
-static void seed_random() {
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) != 0) { err(1, "gettimeofday"); }
-    srandom(tv.tv_usec);
-}
-
-int main(int argc, char **argv) {
-    seed_random();
-    handle_args(&argc, &argv);
-    next_file();
-    
-    if (mode == M_COUNT) {
-        sample_count(samples);
-    } else if (mode == M_PERC) {
-        sample_perc();
-    } else {
-        usage();
+        line = line_iter(cfg, NULL);
     }
     return 0;
 }
