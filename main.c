@@ -124,7 +124,10 @@ static void parse_percent_settings(config *cfg,
         for (char *fn = strsep(&deal_arg, ",");
              fn; fn = strsep(&deal_arg, ",")) {
             FILE *f = NULL;
-            if (fn[0] != '\0') {   /* empty filename -> /dev/null */
+            if (fn[0] == '\0') {                /* /dev/null */
+            } else if (0 == strcmp("-", fn)) {  /* stdout */
+                f = stdout;
+            } else {                            /* file */
                 f = fopen(fn, "ab");
                 if (f == NULL) { err(1, "fopen"); }
             }
