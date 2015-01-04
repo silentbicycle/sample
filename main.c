@@ -16,7 +16,7 @@
 
 #include "sample.h"
 
-/* Version 0.1.0 */
+/* Version 0.1.0 => 0.2.0: +DEAL */
 #define SAMPLE_VERSION_MAJOR 0
 #define SAMPLE_VERSION_MINOR 1
 #define SAMPLE_VERSION_PATCH 0
@@ -37,6 +37,7 @@ static void usage(const char *msg) {
         "    -d FILES - randomly deal lines to multiple files (',' separated)\n"
         "    -n COUNT - Set sample count (default: -n 4)\n"
         "    -p PERC  - Sample PERC percent for input(s) (',' separated)\n"
+        "               If >= 1, argument is used as -p 5 => 0.05 (5%%).\n"
         "    -s SEED  - Set a specific random seed (default: seed based on time)\n"
         );
     exit(1);
