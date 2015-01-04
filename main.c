@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <getopt.h>
+
 #include "sample.h"
 
 /* Version 0.1.0: +DEAL */
