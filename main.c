@@ -149,14 +149,14 @@ static void parse_percent_settings(config *cfg,
             int perc_count = 0;
             for (char *perc = strsep(&perc_arg, ",");
                  perc; perc = strsep(&perc_arg, ",")) {
-                double v;
+                double v = 0;
                 if (perc[0] == '\0') {   /* trailing "," -> remaining */
                     v = 1.0 - total;
                 } else {
                     v = strtod(perc, NULL);
                 }
                 if (v < 0 || v > 100) { usage("Error: Bad percentage."); }
-                if (v > 1.0 && v <= 100.0) { v /= 100.0; }
+                if (v >= 1.0 && v <= 100.0) { v /= 100.0; }
                 total += v;
                 pairs[perc_count].perc = total;
                 perc_count++;
@@ -185,7 +185,7 @@ static void parse_percent_settings(config *cfg,
         /* -p % to stdout */
         double v = strtod(perc_arg, NULL);
         if (v < 0 || v > 100.0) { usage("Error: Bad percentage."); }
-        if (v > 1.0 && v <= 100.0) { v /= 100.0; }
+        if (v >= 1.0 && v <= 100.0) { v /= 100.0; }
         pairs[0].perc = v;
         pairs[0].out = stdout;
         cfg->u.percent.pair_count = 1;

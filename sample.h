@@ -18,6 +18,10 @@ typedef enum {
     M_PERC,                     /* get N% of input */
 } filter_mode;
 
+enum {
+    SAMPLE_DEF_BUF_SIZE = 2,
+};
+
 typedef struct {
     unsigned int seed;
 
@@ -37,6 +41,9 @@ typedef struct {
             struct out_pair *pairs;
         } percent;
     } u;
+
+    size_t buf_size;
+    char *buf;
 } config;
 
 struct out_pair {
