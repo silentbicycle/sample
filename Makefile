@@ -1,6 +1,6 @@
 PROJECT =	sample
 OPTIMIZE =	-O3
-WARN =		-Wall -pedantic #-Wextra
+WARN =		-Wall -pedantic
 #CDEFS +=
 #CINCS +=
 CSTD +=		-std=c99 #-D_POSIX_C_SOURCE=200112L -D_C99_SOURCE
@@ -24,7 +24,7 @@ PREFIX ?=	/usr/local
 INSTALL ?=	install
 RM ?=		rm
 
-install:
+install: ${PROJECT}
 	${INSTALL} -c ${PROJECT} ${PREFIX}/bin
 
 uninstall:
