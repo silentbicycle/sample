@@ -18,7 +18,7 @@
 
 #include "sample.h"
 
-/* Version 0.1.0: +DEAL */
+/* Version 0.1.0. */
 #define SAMPLE_VERSION_MAJOR 0
 #define SAMPLE_VERSION_MINOR 1
 #define SAMPLE_VERSION_PATCH 0
