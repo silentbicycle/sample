@@ -116,6 +116,7 @@ static void parse_percent_settings(config *cfg,
     if (pairs == NULL) { err(1, "calloc"); }
 
     assert(deal_arg != NULL || perc_arg != NULL);
+
     if (deal_arg) {
         /* Multiple output files: */
         int pair_count = 0;
@@ -224,17 +225,34 @@ static bool open_next_file(config *cfg) {
 }
 
 static const char *line_iter(config *cfg, size_t *length) {
+    size_t buf_used = 0;
+    char *buf = cfg->buf;
+    buf[cfg->buf_size - 1] = '\0';
     for (;;) {
         if (cfg->cur_file == NULL) {
             if (!open_next_file(cfg)) { return NULL; }
         }
         
-        size_t len = 0;
-        char *line = fgetln(cfg->cur_file, &len);
+        char *line = fgets(&buf[buf_used], cfg->buf_size - buf_used - 1, cfg->cur_file);
         if (line) {
-            if (line[len - 1] == '\n') { line[len - 1] = '\0'; }
-            if (length) { *length = len; }
-            return line;
+            size_t len = strcspn(line, "\n");
+            size_t nlen = buf_used + len;
+            if (buf[nlen] == '\n') {
+                buf[nlen] = '\0';
+                if (length) { *length = len; }
+                return buf;
+            } else {                /* grow buf and read more */
+                buf_used += len;
+                size_t nsize = 2 * cfg->buf_size;
+                char *nbuf = realloc(buf, nsize);
+                if (nbuf) {
+                    cfg->buf_size = nsize;
+                    cfg->buf = nbuf;
+                    buf = cfg->buf;
+                } else {
+                    return NULL;
+                }
+            }
         } else {
             fclose(cfg->cur_file);
             cfg->cur_file = NULL;
@@ -244,6 +262,7 @@ static const char *line_iter(config *cfg, size_t *length) {
 
 static void cleanup(config *cfg) {
     free(cfg->fnames);
+    free(cfg->buf);
     if (cfg->mode == M_PERC) {
         struct out_pair *pairs = cfg->u.percent.pairs;
         for (int i = 0; i < cfg->u.percent.pair_count; i++) {
@@ -258,6 +277,10 @@ int main(int argc, char **argv) {
     memset(&cfg, 0, sizeof(cfg));
     set_defaults(&cfg);
     handle_args(&cfg, argc, argv);
+
+    cfg.buf = malloc(SAMPLE_DEF_BUF_SIZE);
+    if (cfg.buf == 0) { err(1, "malloc"); }
+    cfg.buf_size = SAMPLE_DEF_BUF_SIZE;
 
     srandom(cfg.seed);
 
